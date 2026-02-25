@@ -208,7 +208,8 @@ const HELP = `agent-debugger \u2014 CLI debugger for AI agents
 
 Usage:
   agent-debugger start <script> [--break file:line] [--runtime path] [--args ...]
-  agent-debugger attach [host:]port [--break file:line] [--language python]
+  agent-debugger attach --pid <PID> [--break file:line]
+  agent-debugger attach [host:]port [--break file:line]
   agent-debugger vars                        Get local variables
   agent-debugger eval <expression>           Evaluate expression
   agent-debugger step [into|out]             Step over/into/out
@@ -279,39 +280,38 @@ async function main(): Promise<void> {
     }
 
     case "attach": {
-      if (args.length < 2) {
-        process.stderr.write("Error: missing port. Usage: agent-debugger attach [host:]port [--break file:line]\n");
-        process.exit(1);
-      }
-      const target = args[1]!;
-      let attachHost: string | undefined;
-      let attachPort: number;
-
-      // Parse [host:]port
-      if (target.includes(":")) {
-        const lastColon = target.lastIndexOf(":");
-        attachHost = target.substring(0, lastColon);
-        attachPort = parseInt(target.substring(lastColon + 1), 10);
-      } else {
-        attachPort = parseInt(target, 10);
-      }
-
-      if (isNaN(attachPort)) {
-        process.stderr.write("Error: invalid port number\n");
-        process.exit(1);
-      }
-
       const attachBreakpoints: string[] = [];
+      let attachHost: string | undefined;
+      let attachPort: number | undefined;
+      let attachPid: number | undefined;
       let attachLanguage: string | undefined;
+      let attachRuntime: string | undefined;
 
-      let ai = 2;
+      let ai = 1;
       while (ai < args.length) {
         if ((args[ai] === "--break" || args[ai] === "-b") && ai + 1 < args.length) {
           attachBreakpoints.push(args[ai + 1]!);
           ai += 2;
+        } else if (args[ai] === "--pid" && ai + 1 < args.length) {
+          attachPid = parseInt(args[ai + 1]!, 10);
+          ai += 2;
         } else if (args[ai] === "--language" && ai + 1 < args.length) {
           attachLanguage = args[ai + 1]!;
           ai += 2;
+        } else if ((args[ai] === "--runtime" || args[ai] === "--python") && ai + 1 < args.length) {
+          attachRuntime = args[ai + 1]!;
+          ai += 2;
+        } else if (!attachPort && !args[ai]!.startsWith("-")) {
+          // Positional: [host:]port
+          const target = args[ai]!;
+          if (target.includes(":")) {
+            const lastColon = target.lastIndexOf(":");
+            attachHost = target.substring(0, lastColon);
+            attachPort = parseInt(target.substring(lastColon + 1), 10);
+          } else {
+            attachPort = parseInt(target, 10);
+          }
+          ai += 1;
         } else {
           const val = args[ai]!;
           if (val.includes(":") && /:\d+/.test(val)) {
@@ -321,13 +321,20 @@ async function main(): Promise<void> {
         }
       }
 
+      if (!attachPort && !attachPid) {
+        process.stderr.write("Error: provide a port or --pid. Usage:\n  agent-debugger attach [host:]port [--break file:line]\n  agent-debugger attach --pid <PID> [--break file:line]\n");
+        process.exit(1);
+      }
+
       const attachCmd: Record<string, unknown> = {
         action: "attach",
-        port: attachPort,
         breakpoints: attachBreakpoints,
       };
+      if (attachPort) attachCmd.port = attachPort;
+      if (attachPid) attachCmd.pid = attachPid;
       if (attachHost) attachCmd.host = attachHost;
       if (attachLanguage) attachCmd.language = attachLanguage;
+      if (attachRuntime) attachCmd.runtime = attachRuntime;
       result = await sendCommand(attachCmd);
       break;
     }

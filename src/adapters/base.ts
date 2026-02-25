@@ -29,6 +29,11 @@ export interface AttachFlowOpts {
   breakpoints?: Array<{ file: string; lines: number[]; conditions?: Array<string | null> }>;
 }
 
+export interface InjectResult {
+  process: ChildProcess;
+  port: number;
+}
+
 export interface AdapterConfig {
   name: string;
 
@@ -49,6 +54,12 @@ export interface AdapterConfig {
    * Handles quirks like debugpy's deferred launch response.
    */
   initFlow(client: DAPClient, opts: InitFlowOpts): Promise<CommandResult>;
+
+  /**
+   * Inject the debug adapter into a running process by PID.
+   * Returns the child process and the DAP port to connect to.
+   */
+  inject?(pid: number, runtimePath?: string): Promise<InjectResult>;
 
   /**
    * Adapter-specific DAP attach flow for connecting to an already-running debuggee.

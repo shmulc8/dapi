@@ -1,10 +1,11 @@
 /** Python debug adapter — debugpy. */
 
-import { spawn as cpSpawn } from "node:child_process";
+import { spawn as cpSpawn, type ChildProcess } from "node:child_process";
+import { Socket } from "node:net";
 import type { DAPClient } from "../dap-client.js";
 import type { StackFrame, Variable } from "../dap-types.js";
 import type { CommandResult } from "../protocol.js";
-import type { AdapterConfig, SpawnResult, LaunchOpts, InitFlowOpts, AttachFlowOpts } from "./base.js";
+import type { AdapterConfig, SpawnResult, InjectResult, LaunchOpts, InitFlowOpts, AttachFlowOpts } from "./base.js";
 import { getFreePort } from "../util/ports.js";
 
 export class PythonAdapter implements AdapterConfig {
@@ -28,6 +29,27 @@ export class PythonAdapter implements AdapterConfig {
       ["-Xfrozen_modules=off", "-m", "debugpy.adapter", "--host", "127.0.0.1", "--port", String(port)],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
+    return { process: proc, port };
+  }
+
+  /**
+   * Inject debugpy into a running Python process by PID.
+   * Runs: python -m debugpy --listen 127.0.0.1:PORT --pid PID
+   * This injects the debug adapter into the target process and starts a DAP server.
+   */
+  async inject(pid: number, runtimePath?: string): Promise<InjectResult> {
+    const python = runtimePath || "python3";
+    const port = await getFreePort();
+
+    const proc = cpSpawn(
+      python,
+      ["-m", "debugpy", "--listen", `127.0.0.1:${port}`, "--pid", String(pid)],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+
+    // Wait for the DAP server to be ready by polling the port
+    await waitForPort(port, 15000, proc);
+
     return { process: proc, port };
   }
 
@@ -246,5 +268,42 @@ function execCheck(cmd: string, args: string[]): Promise<void> {
       else reject(new Error(`${cmd} exited with code ${code}`));
     });
     proc.on("error", reject);
+  });
+}
+
+/** Poll a TCP port until it accepts connections, or timeout. */
+function waitForPort(port: number, timeout: number, proc: ChildProcess): Promise<void> {
+  const deadline = Date.now() + timeout;
+
+  return new Promise((resolve, reject) => {
+    // Fail fast if the injection process exits with an error
+    let procExited = false;
+    let procStderr = "";
+    proc.stderr?.on("data", (chunk: Buffer) => { procStderr += chunk.toString(); });
+    proc.on("exit", (code) => {
+      if (code !== 0 && !procExited) {
+        procExited = true;
+        reject(new Error(`debugpy inject failed (exit ${code}): ${procStderr.trim() || "unknown error"}`));
+      }
+    });
+
+    const attempt = () => {
+      if (procExited) return;
+      if (Date.now() > deadline) {
+        reject(new Error(`Timeout waiting for debugpy to start on port ${port}`));
+        return;
+      }
+      const sock = new Socket();
+      sock.once("connect", () => {
+        sock.destroy();
+        resolve();
+      });
+      sock.once("error", () => {
+        sock.destroy();
+        setTimeout(attempt, 200);
+      });
+      sock.connect(port, "127.0.0.1");
+    };
+    attempt();
   });
 }

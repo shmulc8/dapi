@@ -137,6 +137,10 @@ export class Session {
       return { error: "Session already active. Run 'agent-debugger close' first." };
     }
 
+    if (!cmd.port && !cmd.pid) {
+      return { error: "Either port or --pid is required" };
+    }
+
     this.state = "starting";
 
     // Get adapter (default to python)
@@ -152,13 +156,38 @@ export class Session {
       return { error: `Attach not supported for ${this.adapter.name}` };
     }
 
-    const host = cmd.host || "127.0.0.1";
-    const port = cmd.port;
+    let host = cmd.host || "127.0.0.1";
+    let port = cmd.port;
 
-    // Connect DAP client directly to the debuggee's debug server
+    // PID mode: inject debugpy into the running process
+    if (cmd.pid) {
+      if (!this.adapter.inject) {
+        this.state = "idle";
+        return { error: `PID injection not supported for ${this.adapter.name}` };
+      }
+
+      // Check debugpy is installed
+      const installErr = await this.adapter.checkInstalled(cmd.runtime);
+      if (installErr) {
+        this.state = "idle";
+        return { error: installErr };
+      }
+
+      try {
+        const injectResult = await this.adapter.inject(cmd.pid, cmd.runtime);
+        this.adapterProcess = injectResult.process;
+        port = injectResult.port;
+        host = "127.0.0.1";
+      } catch (err) {
+        this.state = "idle";
+        return { error: `Failed to inject debugpy into PID ${cmd.pid}: ${(err as Error).message}` };
+      }
+    }
+
+    // Connect DAP client to the debug server
     try {
       this.client = new DAPClient();
-      await this.client.connect(host, port);
+      await this.client.connect(host, port!);
     } catch (err) {
       this.state = "idle";
       this.client = null;
@@ -171,7 +200,7 @@ export class Session {
     // Run adapter-specific attach flow
     const result = await this.adapter.attachFlow(this.client, {
       host,
-      port,
+      port: port!,
       breakpoints,
     });
 

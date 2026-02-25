@@ -18,8 +18,10 @@ export const StartCommand = z.object({
 export const AttachCommand = z.object({
   action: z.literal("attach"),
   host: z.string().optional(),
-  port: z.number(),
+  port: z.number().optional(),
+  pid: z.number().optional(),
   language: z.string().optional(),
+  runtime: z.string().optional(),
   breakpoints: z.array(z.string()).optional(),
 });
 
