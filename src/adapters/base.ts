@@ -26,12 +26,17 @@ export interface InitFlowOpts extends LaunchOpts {
 export interface AttachFlowOpts {
   host: string;
   port: number;
+  /** Path to language runtime (needed to spawn adapter). */
+  runtimePath?: string;
   breakpoints?: Array<{ file: string; lines: number[]; conditions?: Array<string | null> }>;
 }
 
 export interface InjectResult {
   process: ChildProcess;
+  /** Port for the DAP client to connect to (adapter port). */
   port: number;
+  /** Port where debugpy is listening inside the debuggee (for adapter routing). */
+  debuggeePort?: number;
 }
 
 export interface AdapterConfig {

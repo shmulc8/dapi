@@ -1,7 +1,6 @@
 /** Python debug adapter — debugpy. */
 
 import { spawn as cpSpawn, type ChildProcess } from "node:child_process";
-import { Socket } from "node:net";
 import type { DAPClient } from "../dap-client.js";
 import type { StackFrame, Variable } from "../dap-types.js";
 import type { CommandResult } from "../protocol.js";
@@ -33,24 +32,55 @@ export class PythonAdapter implements AdapterConfig {
   }
 
   /**
-   * Inject debugpy into a running Python process by PID.
-   * Runs: python -m debugpy --listen 127.0.0.1:PORT --pid PID
-   * This injects the debug adapter into the target process and starts a DAP server.
+   * Inject debugpy into a running Python process by PID using lldb.
+   *
+   * Uses Python C API calls (PyGILState_Ensure/PyRun_SimpleString/PyGILState_Release)
+   * via lldb expressions — no architecture-specific dylibs needed.
+   * Works on macOS ARM64 where debugpy's built-in --pid inject fails.
+   *
+   * debugpy.listen() spawns its own adapter subprocess, so the returned port
+   * is where the adapter is serving DAP for clients to connect to.
    */
   async inject(pid: number, runtimePath?: string): Promise<InjectResult> {
-    const python = runtimePath || "python3";
-    const port = await getFreePort();
+    const debuggeePort = await getFreePort();
 
-    const proc = cpSpawn(
-      python,
-      ["-m", "debugpy", "--listen", `127.0.0.1:${port}`, "--pid", String(pid)],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    );
+    // Use lldb to inject debugpy.listen() into the running process
+    const code = `import debugpy; debugpy.listen(('127.0.0.1', ${debuggeePort}))`;
+    const lldbProc = cpSpawn("lldb", [
+      "--batch",
+      "-o", `process attach --pid ${pid}`,
+      "-o", `expr (int) PyGILState_Ensure()`,
+      "-o", `expr (int) PyRun_SimpleString("${code}")`,
+      "-o", `expr (void) PyGILState_Release($0)`,
+      "-o", `detach`,
+    ], { stdio: ["pipe", "pipe", "pipe"] });
 
-    // Wait for the DAP server to be ready by polling the port
-    await waitForPort(port, 15000, proc);
+    // Wait for lldb to finish
+    const lldbOutput = await new Promise<string>((resolve, reject) => {
+      let stdout = "";
+      let stderr = "";
+      lldbProc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+      lldbProc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      lldbProc.on("exit", (exitCode) => {
+        if (exitCode !== 0) reject(new Error(`lldb failed (exit ${exitCode}): ${stderr.trim()}`));
+        else resolve(stdout);
+      });
+      lldbProc.on("error", (err) => reject(new Error(`lldb not found: ${err.message}`)));
+    });
 
-    return { process: proc, port };
+    // Verify PyRun_SimpleString returned 0 (success)
+    if (lldbOutput.includes("$1 = -1")) {
+      throw new Error("PyRun_SimpleString failed — debugpy may not be installed in the target process");
+    }
+
+    // Don't poll the port here — debugpy treats a TCP connection as a DAP client,
+    // and our probe would consume the single-client slot. The DAPClient.connect()
+    // has its own retry loop that will wait for the port to be ready.
+
+    // Small delay for debugpy to initialize its server after lldb detaches.
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    return { process: lldbProc, port: debuggeePort };
   }
 
   initializeArgs(): Record<string, unknown> {
@@ -175,13 +205,15 @@ export class PythonAdapter implements AdapterConfig {
   }
 
   /**
-   * Attach flow for debugpy — connects to a running debugpy listener.
-   * The user starts their server with:
-   *   python -m debugpy --listen PORT [-m module | script.py]
-   * or adds debugpy.listen(PORT) to their code.
+   * Attach flow for debugpy — connects to a debugpy.listen() DAP server.
    *
-   * Flow: initialize -> attach (async) -> initialized event -> setBreakpoints
-   *       -> configurationDone -> attach response -> program continues running
+   * debugpy.listen() starts a debug server that speaks DAP, but after the
+   * `attach` request it emits `debugpyWaitingForServer` — requiring a
+   * debugpy.adapter process to connect to an internal port before proceeding.
+   *
+   * Flow: initialize -> attach (async) -> debugpyWaitingForServer event
+   *       -> spawn adapter -> initialized event -> setBreakpoints
+   *       -> configurationDone -> attach response -> program running
    */
   async attachFlow(client: DAPClient, opts: AttachFlowOpts): Promise<CommandResult> {
     // 1. Initialize
@@ -190,7 +222,7 @@ export class PythonAdapter implements AdapterConfig {
       return { error: `Initialize failed: ${initResp.message || "unknown"}` };
     }
 
-    // 2. Attach (async — debugpy defers response until configurationDone)
+    // 2. Attach (async — response deferred until configurationDone)
     const attachArgs: Record<string, unknown> = {
       type: "debugpy",
       request: "attach",
@@ -199,13 +231,16 @@ export class PythonAdapter implements AdapterConfig {
     };
     const attachSeq = client.requestAsync("attach", attachArgs);
 
-    // 3. Wait for initialized event
-    const initialized = await client.waitForEvent("initialized", 10000);
+    // 3. Wait for initialized event.
+    //    debugpy.listen() spawns its own adapter subprocess with the access token.
+    //    After the adapter connects to the internal server, the initialized event fires.
+    //    We drain debugpyWaitingForServer and other internal events along the way.
+    const initialized = await client.waitForEvent("initialized", 15000);
     if (!initialized) {
       return { error: "Timeout waiting for initialized event from debugpy" };
     }
 
-    // 4. Set breakpoints
+    // 6. Set breakpoints
     const bpResults: Array<{ file: string; line: number; verified: boolean }> = [];
     if (opts.breakpoints?.length) {
       for (const bp of opts.breakpoints) {
@@ -233,20 +268,19 @@ export class PythonAdapter implements AdapterConfig {
       }
     }
 
-    // 5. Exception breakpoints
+    // 7. Exception breakpoints
     await client.request("setExceptionBreakpoints", { filters: [] });
 
-    // 6. configurationDone
+    // 8. configurationDone
     await client.request("configurationDone");
 
-    // 7. Wait for the deferred attach response
+    // 9. Wait for the deferred attach response
     const attachResp = await client.waitForResponse(attachSeq, 15000);
     if (!attachResp.success) {
       return { error: `Attach failed: ${attachResp.message || "unknown"}` };
     }
 
     // Program is already running — don't wait for stopped event.
-    // The user should trigger their server, then run `agent-debugger continue` to wait.
     return { status: "running", breakpoints: bpResults };
   }
 
@@ -268,42 +302,5 @@ function execCheck(cmd: string, args: string[]): Promise<void> {
       else reject(new Error(`${cmd} exited with code ${code}`));
     });
     proc.on("error", reject);
-  });
-}
-
-/** Poll a TCP port until it accepts connections, or timeout. */
-function waitForPort(port: number, timeout: number, proc: ChildProcess): Promise<void> {
-  const deadline = Date.now() + timeout;
-
-  return new Promise((resolve, reject) => {
-    // Fail fast if the injection process exits with an error
-    let procExited = false;
-    let procStderr = "";
-    proc.stderr?.on("data", (chunk: Buffer) => { procStderr += chunk.toString(); });
-    proc.on("exit", (code) => {
-      if (code !== 0 && !procExited) {
-        procExited = true;
-        reject(new Error(`debugpy inject failed (exit ${code}): ${procStderr.trim() || "unknown error"}`));
-      }
-    });
-
-    const attempt = () => {
-      if (procExited) return;
-      if (Date.now() > deadline) {
-        reject(new Error(`Timeout waiting for debugpy to start on port ${port}`));
-        return;
-      }
-      const sock = new Socket();
-      sock.once("connect", () => {
-        sock.destroy();
-        resolve();
-      });
-      sock.once("error", () => {
-        sock.destroy();
-        setTimeout(attempt, 200);
-      });
-      sock.connect(port, "127.0.0.1");
-    };
-    attempt();
   });
 }

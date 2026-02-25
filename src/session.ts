@@ -159,7 +159,7 @@ export class Session {
     let host = cmd.host || "127.0.0.1";
     let port = cmd.port;
 
-    // PID mode: inject debugpy into the running process
+    // PID mode: inject debugpy into the running process via lldb
     if (cmd.pid) {
       if (!this.adapter.inject) {
         this.state = "idle";
@@ -175,8 +175,9 @@ export class Session {
 
       try {
         const injectResult = await this.adapter.inject(cmd.pid, cmd.runtime);
-        this.adapterProcess = injectResult.process;
-        port = injectResult.port;
+        // inject() uses lldb to call debugpy.listen() inside the process.
+        // The debuggeePort is where the DAP server is now running in-process.
+        port = injectResult.debuggeePort ?? injectResult.port;
         host = "127.0.0.1";
       } catch (err) {
         this.state = "idle";
@@ -184,7 +185,7 @@ export class Session {
       }
     }
 
-    // Connect DAP client to the debug server
+    // Connect DAP client directly to the debugpy server
     try {
       this.client = new DAPClient();
       await this.client.connect(host, port!);
@@ -201,6 +202,7 @@ export class Session {
     const result = await this.adapter.attachFlow(this.client, {
       host,
       port: port!,
+      runtimePath: cmd.runtime,
       breakpoints,
     });
 
