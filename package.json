@@ -1,6 +1,6 @@
 {
   "name": "agent-debugger",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI debugger for AI agents — debug any language via DAP",
   "keywords": [
     "debugger",
