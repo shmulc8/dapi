@@ -1,12 +1,12 @@
 ---
 name: agent-debugger
-description: Use when a program crashes, a test fails, or code produces wrong results and reading the source isn't enough to see why. Lets you pause execution at any line and inspect the actual runtime state, variable values, types, call stacks, to find what went wrong.
+description: Use when a program crashes, a test fails, or code produces wrong results and reading the source isn't enough to see why. Lets you pause execution at any line and inspect the actual runtime state, variable values, types, call stacks, to find what went wrong. Can attach to running servers by PID — no restart or code changes needed.
 allowed-tools: Bash(npx -y agent-debugger:*), Bash(agent-debugger:*)
 ---
 
 # Agent Debugger
 
-A debugger for AI agents. Set breakpoints, inspect state, evaluate expressions, test fixes in-place.
+A debugger for AI agents. Set breakpoints, inspect state, evaluate expressions, test fixes in-place. Attach to running servers by PID — no restart, no code changes, no manual setup.
 
 ## Philosophy
 
@@ -49,7 +49,8 @@ agent-debugger start <script> --break file:line[:condition] [--runtime path] [--
 
 # If not installed:
 npx -y agent-debugger start <script> --break file:line[:condition] [--runtime path] [--args ...]
-agent-debugger attach [host:]port [--break file:line] [--language python]
+agent-debugger attach --pid <PID> [--break file:line]    # Attach to running process (no restart needed)
+agent-debugger attach [host:]port [--break file:line]    # Attach to existing debug server
 agent-debugger eval <expression>        # Run any expression in the current frame
 agent-debugger vars                     # List local variables (prefer eval)
 agent-debugger step [into|out]          # Step over / into function / out of function
@@ -63,39 +64,43 @@ agent-debugger close                    # Detach / end debug session
 
 Multiple `--break` flags supported. Conditions are expressions: `--break "app.py:42:len(items) > 10"`.
 
-### Attaching to a Running Server
+### Debugging a Running Server
 
-Use `attach` to debug a server (e.g. uvicorn, Flask, FastAPI) without restarting it.
+Use `attach --pid` to debug any running Python server (uvicorn, Flask, FastAPI, Django, etc.) without restarting it or changing any code. debugpy is auto-installed if missing.
 
 ```bash
-# Terminal 1: Start the server with debugpy listening
-python -m debugpy --listen 5678 --wait-for-client -m uvicorn app:main
+# Find the server's PID
+ps aux | grep uvicorn
 
-# Terminal 2: Attach the debugger and set breakpoints
-agent-debugger attach 5678 --break routes.py:42
+# Attach — no restart, no code changes, no setup
+agent-debugger attach --pid 12345 --break routes.py:42
 
-# Terminal 3: Trigger the endpoint
+# Trigger a request to hit the breakpoint
 curl localhost:8000/api/endpoint
 
-# Terminal 2: Wait for the breakpoint, then inspect
-agent-debugger continue      # blocks until breakpoint hit
+# Wait for the breakpoint hit, then inspect
+agent-debugger continue
 agent-debugger vars
 agent-debugger eval "request.body"
 agent-debugger close         # detaches without killing the server
 ```
 
-You can also add debugpy to your code instead of wrapping the command:
-```python
-import debugpy
-debugpy.listen(5678)
-# debugpy.wait_for_client()  # uncomment to pause until debugger attaches
+If the server uses a virtualenv, the debugger auto-detects it and installs debugpy into the correct environment.
+
+#### Alternative: attach by port
+
+If you prefer explicit control, start the server with debugpy and attach by port:
+
+```bash
+python -m debugpy --listen 5678 -m uvicorn app:main
+agent-debugger attach 5678 --break routes.py:42
 ```
 
 ## Supported Languages
 
 | Language | Extension | Adapter | Requirement |
 |----------|-----------|---------|-------------|
-| Python | .py | debugpy | `pip install debugpy` |
+| Python | .py | debugpy | Auto-installed on attach. Or: `pip install debugpy` |
 | JavaScript/TypeScript | .js/.ts | Node Inspector | Node.js |
 | Go | .go | Delve | `go install github.com/go-delve/delve/cmd/dlv@latest` |
 | Rust/C/C++ | .rs/.c/.cpp | CodeLLDB | `CODELLDB_PATH` env var |
@@ -259,5 +264,6 @@ agent-debugger eval "users[2]"                           # {'name': 'Charlie', '
 
 - Use **absolute paths** for breakpoints
 - One session at a time — `close` before starting another
-- Python requires `debugpy` (`pip install debugpy`)
+- `attach --pid` auto-installs debugpy — no manual setup needed
+- `attach --pid` requires lldb (macOS, included with Xcode CLI tools) or gdb (Linux)
 - Program stdout goes to the daemon — use `eval` to inspect output values
