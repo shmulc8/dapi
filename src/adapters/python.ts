@@ -81,8 +81,8 @@ export class PythonAdapter implements AdapterConfig {
 
   initializeArgs(): Record<string, unknown> {
     return {
-      clientID: "agent-debugger",
-      clientName: "agent-debugger",
+      clientID: "dapi",
+      clientName: "dapi",
       adapterID: "debugpy",
       pathFormat: "path",
       linesStartAt1: true,
@@ -169,7 +169,7 @@ export class PythonAdapter implements AdapterConfig {
     }
 
     // 5. Exception breakpoints (empty = no exception breaking)
-    await client.request("setExceptionBreakpoints", { filters: [] });
+    await client.request("setExceptionBreakpoints", { filters: opts.exceptionFilters ?? [] });
 
     // 6. configurationDone
     await client.request("configurationDone");
@@ -265,7 +265,7 @@ export class PythonAdapter implements AdapterConfig {
     }
 
     // 7. Exception breakpoints
-    await client.request("setExceptionBreakpoints", { filters: [] });
+    await client.request("setExceptionBreakpoints", { filters: opts.exceptionFilters ?? [] });
 
     // 8. configurationDone
     await client.request("configurationDone");

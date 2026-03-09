@@ -9,6 +9,7 @@ export const StartCommand = z.object({
   script: z.string(),
   language: z.string().optional(),
   breakpoints: z.array(z.string()).optional(),
+  exceptionFilters: z.array(z.string()).optional(),
   runtime: z.string().optional(),
   args: z.array(z.string()).optional(),
   cwd: z.string().optional(),
@@ -23,21 +24,13 @@ export const AttachCommand = z.object({
   language: z.string().optional(),
   runtime: z.string().optional(),
   breakpoints: z.array(z.string()).optional(),
+  exceptionFilters: z.array(z.string()).optional(),
 });
 
 export const VarsCommand = z.object({ action: z.literal("vars") });
 export const StackCommand = z.object({ action: z.literal("stack") });
-
-export const EvalCommand = z.object({
-  action: z.literal("eval"),
-  expression: z.string(),
-});
-
-export const StepCommand = z.object({
-  action: z.literal("step"),
-  kind: z.enum(["over", "into", "out"]).optional(),
-});
-
+export const EvalCommand = z.object({ action: z.literal("eval"), expression: z.string() });
+export const StepCommand = z.object({ action: z.literal("step"), kind: z.enum(["over", "into", "out"]).optional() });
 export const ContinueCommand = z.object({ action: z.literal("continue") });
 
 export const BreakCommand = z.object({
@@ -56,6 +49,12 @@ export const SourceCommand = z.object({
 export const StatusCommand = z.object({ action: z.literal("status") });
 export const CloseCommand = z.object({ action: z.literal("close") });
 
+/** Drain buffered stdout/stderr captured since the last stop. */
+export const OutputCommand = z.object({ action: z.literal("output") });
+
+/** Re-fetch auto-context (location + source + locals + stack + output) without stepping. */
+export const ContextCommand = z.object({ action: z.literal("context") });
+
 export const Command = z.discriminatedUnion("action", [
   StartCommand,
   AttachCommand,
@@ -68,6 +67,8 @@ export const Command = z.discriminatedUnion("action", [
   SourceCommand,
   StatusCommand,
   CloseCommand,
+  OutputCommand,
+  ContextCommand,
 ]);
 
 export type Command = z.infer<typeof Command>;
@@ -94,20 +95,30 @@ export interface VariableInfo {
 
 export interface CommandResult {
   error?: string;
+  // Execution commands: start, step, continue, context
   status?: string;
   reason?: string;
   location?: LocationInfo | null;
-  breakpoints?: BreakpointInfo[];
+  source_snippet?: string;
   variables?: VariableInfo[];
-  count?: number;
   frames?: LocationInfo[];
+  output?: string;
+  breakpoints?: BreakpointInfo[];
+  // Termination
+  exitCode?: number | null;
+  // vars (standalone)
+  count?: number;
+  // eval
   result?: string;
   type?: string;
-  exitCode?: number | null;
+  // source (standalone)
   source?: string;
   file?: string;
   line?: number;
+  // break
   verified?: boolean;
+  // status
   state?: string;
+  // informational (e.g. "Program finished without hitting breakpoint")
   message?: string;
 }

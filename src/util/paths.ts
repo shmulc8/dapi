@@ -1,8 +1,12 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-const SESSION_DIR = join(homedir(), ".agent-debugger");
-const SOCKET_PATH = join(SESSION_DIR, "daemon.sock");
-const PID_FILE = join(SESSION_DIR, "daemon.pid");
+export const BASE_DIR = join(homedir(), ".dapi");
 
-export { SESSION_DIR, SOCKET_PATH, PID_FILE };
+export function socketPath(session: string): string {
+  return join(BASE_DIR, `${session}.sock`);
+}
+
+export function pidFile(session: string): string {
+  return join(BASE_DIR, `${session}.pid`);
+}

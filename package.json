@@ -1,55 +1,31 @@
 {
-  "name": "agent-debugger",
-  "version": "0.3.0",
-  "description": "CLI debugger for AI agents — debug any language via DAP",
-  "keywords": [
-    "debugger",
-    "debug",
-    "dap",
-    "cli",
-    "ai-agent",
-    "breakpoint",
-    "python",
-    "javascript",
-    "typescript",
-    "go",
-    "rust"
-  ],
+  "name": "dapi",
+  "version": "0.1.0",
+  "description": "CLI debugger for AI agents — attach by PID, auto-context on every stop, multi-session",
+  "keywords": ["debugger", "dap", "cli", "ai-agent", "breakpoint", "python", "go", "javascript", "typescript", "rust"],
   "type": "module",
   "bin": {
-    "agent-debugger": "./bin/agent-debugger"
+    "dapi": "./bin/dapi"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/src/session.d.ts",
-      "import": "./dist/src/session.js"
-    }
-  },
-  "files": [
-    "bin/",
-    "dist/",
-    "skills/"
-  ],
+  "files": ["bin/", "src/", "skills/"],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc && chmod +x bin/agent-debugger",
-    "dev": "tsc --watch",
-    "test": "node --test dist/test/*.test.js",
-    "prepublishOnly": "npm run build"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^20.14.10",
+    "@types/bun": "latest",
     "typescript": "^5.8.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "bun": ">=1.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/JoaquinCampo/agent-debugger"
+    "url": "https://github.com/anuk909/dapi"
   },
   "license": "MIT"
 }

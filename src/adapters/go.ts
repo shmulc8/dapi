@@ -34,8 +34,8 @@ export class GoAdapter implements AdapterConfig {
 
   initializeArgs(): Record<string, unknown> {
     return {
-      clientID: "agent-debugger",
-      clientName: "agent-debugger",
+      clientID: "dapi",
+      clientName: "dapi",
       adapterID: "dlv",
       pathFormat: "path",
       linesStartAt1: true,
@@ -112,7 +112,7 @@ export class GoAdapter implements AdapterConfig {
     }
 
     // 5. Exception breakpoints (empty = no exception breaking, required by spec)
-    await client.request("setExceptionBreakpoints", { filters: [] });
+    await client.request("setExceptionBreakpoints", { filters: opts.exceptionFilters ?? [] });
 
     // 6. configurationDone
     await client.request("configurationDone");
