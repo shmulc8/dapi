@@ -91,7 +91,7 @@ See [docs/cli-reference.md](docs/cli-reference.md) for all flags and multi-sessi
 | Language | Extension | Adapter | Setup |
 |----------|-----------|---------|-------|
 | Python | `.py` | debugpy | auto-installed on `attach --pid` |
-| JavaScript/TypeScript | `.js` `.ts` | js-debug | VS Code, or `JS_DEBUG_PATH` |
+| JavaScript/TypeScript | `.js` `.ts` | js-debug | Auto-installed on first use |
 | Go | `.go` | Delve | `go install ...dlv@latest` |
 | Rust/C/C++ | `.rs` `.c` `.cpp` | CodeLLDB | `CODELLDB_PATH` env var |
 

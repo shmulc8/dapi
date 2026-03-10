@@ -1,15 +1,18 @@
 /** Node.js debug adapter — @vscode/js-debug (dapDebugServer). */
 
-import { spawn as cpSpawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
+import { spawn as cpSpawn, execSync } from "node:child_process";
+import { existsSync, readdirSync, mkdirSync, rmSync } from "node:fs";
+import { resolve as pathResolve, join } from "node:path";
 import { homedir } from "node:os";
 import type { DAPClient } from "../dap-client.js";
 import type { StackFrame, Variable } from "../dap-types.js";
 import type { CommandResult } from "../protocol.js";
 import type { AdapterConfig, SpawnResult, LaunchOpts, InitFlowOpts } from "./base.js";
 import { getFreePort } from "../util/ports.js";
+import { BASE_DIR } from "../util/paths.js";
 
+const JS_DEBUG_DIR = join(BASE_DIR, "js-debug");
+const JS_DEBUG_DAP_SERVER = join(JS_DEBUG_DIR, "src", "dapDebugServer.js");
 /** Locate dapDebugServer.js from js-debug. */
 function findJsDebugPath(): string | null {
   // 1. Explicit env var
@@ -37,7 +40,38 @@ function findJsDebugPath(): string | null {
     }
   }
 
+  // 3. Auto-provisioned copy in ~/.dapi/js-debug
+  if (existsSync(JS_DEBUG_DAP_SERVER)) return JS_DEBUG_DAP_SERVER;
+
   return null;
+}
+
+/**
+ * Download and extract the standalone js-debug DAP server from GitHub releases.
+ * The tarball extracts to js-debug/ which contains src/dapDebugServer.js.
+ */
+function provisionJsDebug(): string {
+  mkdirSync(BASE_DIR, { recursive: true });
+
+  // Clean up any previous failed install
+  if (existsSync(JS_DEBUG_DIR)) {
+    rmSync(JS_DEBUG_DIR, { recursive: true, force: true });
+  }
+
+  // Resolve the latest release tag
+  const tag = execSync(
+    'curl -sI "https://github.com/microsoft/vscode-js-debug/releases/latest" | grep -i ^location: | sed "s/.*tag\\///" | tr -d "\\r\\n"',
+    { encoding: "utf-8" },
+  ).trim();
+  if (!tag) throw new Error("Failed to resolve latest js-debug release tag");
+
+  const url = `https://github.com/microsoft/vscode-js-debug/releases/download/${tag}/js-debug-dap-${tag}.tar.gz`;
+  execSync(`curl -sL "${url}" | tar -xzf - -C "${BASE_DIR}"`, { stdio: "pipe" });
+
+  if (!existsSync(JS_DEBUG_DAP_SERVER)) {
+    throw new Error(`js-debug download succeeded but ${JS_DEBUG_DAP_SERVER} not found`);
+  }
+  return JS_DEBUG_DAP_SERVER;
 }
 
 export class NodeAdapter implements AdapterConfig {
@@ -51,14 +85,18 @@ export class NodeAdapter implements AdapterConfig {
       return "Node.js not found in PATH";
     }
 
-    // Check js-debug is available
-    const jsDebugPath = findJsDebugPath();
-    if (!jsDebugPath) {
-      return [
-        "@vscode/js-debug not found.",
-        "Install VS Code (which bundles js-debug), or set JS_DEBUG_PATH to the js-debug extension directory.",
-        "  e.g. JS_DEBUG_PATH=~/.vscode/extensions/ms-vscode.js-debug-1.x.x",
-      ].join("\n");
+    // Check js-debug is available, auto-provision if missing
+    if (!findJsDebugPath()) {
+      try {
+        provisionJsDebug();
+      } catch (err) {
+        return [
+          "@vscode/js-debug not found and auto-install failed.",
+          err instanceof Error ? err.message : String(err),
+          "Set JS_DEBUG_PATH manually, e.g.:",
+          "  JS_DEBUG_PATH=~/.vscode/extensions/ms-vscode.js-debug-1.x.x",
+        ].join("\n");
+      }
     }
 
     return null;

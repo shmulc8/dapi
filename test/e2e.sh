@@ -307,6 +307,10 @@ elif [ -d "$HOME/.vscode/extensions" ]; then
     JS_DEBUG_AVAILABLE=1
   fi
 fi
+# dapi auto-provisions js-debug on first use, so always try if Node.js is available
+if [ "$JS_DEBUG_AVAILABLE" -eq 0 ] && command -v node >/dev/null 2>&1; then
+  JS_DEBUG_AVAILABLE=1
+fi
 
 if [ "$JS_DEBUG_AVAILABLE" -eq 1 ]; then
   echo "─── Test 14: Node.js (js-debug) ───"

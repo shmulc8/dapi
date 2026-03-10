@@ -111,7 +111,7 @@ export class Session {
       });
       this.adapterProcess = spawnResult.process;
       this.client = new DAPClient();
-      await this.client.connect("127.0.0.1", spawnResult.port);
+      await this.client.connect("localhost", spawnResult.port);
     } catch (err) {
       this.state = "idle";
       return { error: `Failed to start debug adapter: ${(err as Error).message}` };

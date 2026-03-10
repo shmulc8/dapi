@@ -116,7 +116,7 @@ No separate `vars`, `stack`, `source` calls needed unless you want them.
 | Language | Extension | Adapter | Requirement |
 |----------|-----------|---------|-------------|
 | Python | .py | debugpy | Auto-installed on `attach --pid`. Or: `pip install debugpy` |
-| JavaScript/TypeScript | .js/.ts | js-debug | Node.js + VS Code extension |
+| JavaScript/TypeScript | .js/.ts | js-debug | Node.js (auto-installed on first use) |
 | Go | .go | Delve | `go install github.com/go-delve/delve/cmd/dlv@latest` |
 | Rust/C/C++ | .rs/.c/.cpp | CodeLLDB | `CODELLDB_PATH` env var |
 

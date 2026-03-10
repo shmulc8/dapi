@@ -3,7 +3,7 @@
 | Language | Extension | Adapter | Setup |
 |----------|-----------|---------|-------|
 | Python | `.py` | debugpy | `pip install debugpy` (auto-installed on `attach --pid`) |
-| JavaScript/TypeScript | `.js` `.ts` | @vscode/js-debug | VS Code installed, or `JS_DEBUG_PATH` env var |
+| JavaScript/TypeScript | `.js` `.ts` | @vscode/js-debug | Auto-installed on first use. Override with `JS_DEBUG_PATH` env var |
 | Go | `.go` | Delve | `go install github.com/go-delve/delve/cmd/dlv@latest` |
 | Rust/C/C++ | `.rs` `.c` `.cpp` | CodeLLDB | `CODELLDB_PATH` env var |
 
@@ -19,7 +19,7 @@ dapi start app.py --break app.py:10 --runtime /path/to/venv/bin/python
 
 ## JavaScript/TypeScript
 
-js-debug is auto-detected from `~/.vscode/extensions/`. Override with:
+js-debug is auto-provisioned on first use — downloaded from [GitHub releases](https://github.com/microsoft/vscode-js-debug/releases) to `~/.dapi/js-debug/`. Also auto-detected from `~/.vscode/extensions/` if present. Override with:
 
 ```bash
 export JS_DEBUG_PATH=/path/to/ms-vscode.js-debug-x.x.x
