@@ -17,8 +17,10 @@ Supports Python, Go, JavaScript/TypeScript, Rust, C, and C++.
 
 ### Claude Code
 
-```
-/claude install anuk909/dapi
+```bash
+mkdir -p ~/.claude/skills/dapi && \
+  curl -fsSL https://raw.githubusercontent.com/anuk909/dapi/main/skills/dapi/SKILL.md \
+  -o ~/.claude/skills/dapi/SKILL.md
 ```
 
 ### Other agents
