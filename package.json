@@ -1,6 +1,6 @@
 {
   "name": "dapi-cli",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "CLI debugger for AI agents — attach by PID, auto-context on every stop, multi-session",
   "keywords": [
     "debugger",
