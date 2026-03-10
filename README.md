@@ -4,7 +4,7 @@
 
 `dapi` ships two things:
 
-- **A Claude Code skill** — teaches Claude *when* to reach for the debugger, how to form a hypothesis, and how to confirm it with a single `eval`. Install once, works on every project.
+- **An agent skill** — teaches your AI agent *when* to reach for the debugger, how to form a hypothesis, and how to confirm it with a single `eval`. Install once, works on every project.
 - **The `dapi` CLI** — a stateless CLI wrapper around the [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/) (DAP). Set breakpoints, inspect runtime state, attach to running servers by PID — no IDE, no restart, no guesswork.
 
 Every stop returns **auto-context**: location + source snippet + locals + stack + output in one shot. No follow-up calls needed.
@@ -15,7 +15,7 @@ Supports Python, Go, JavaScript/TypeScript, Rust, C, and C++.
 
 ## Install the Skill
 
-### Claude Code
+### Claude Code (and compatible agents)
 
 ```bash
 mkdir -p ~/.claude/skills/dapi
